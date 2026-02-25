@@ -33,9 +33,12 @@ def chat_agent_builder(message: str, conversation_id: str | None = None) -> tupl
     }
 
     resp = requests.get(f"{kibana_url}/api/agent_builder/agents", headers=headers, timeout=10)
-    agents = resp.json() if resp.status_code == 200 else []
+    if resp.status_code != 200:
+        return f"ERROR: Failed to list agents (HTTP {resp.status_code})", ""
+    resp_data = resp.json()
+    agents = resp_data.get("results", []) if isinstance(resp_data, dict) else resp_data or []
     agent_id = None
-    for a in agents if isinstance(agents, list) else []:
+    for a in agents:
         if a.get("name") == "CampaignPilot":
             agent_id = a.get("id")
             break
@@ -58,7 +61,29 @@ def chat_agent_builder(message: str, conversation_id: str | None = None) -> tupl
         return f"ERROR: Agent Builder returned {resp.status_code}: {resp.text[:300]}", ""
 
     data = resp.json()
-    reply = data.get("response", data.get("message", str(data)))
+
+    # Robustly extract text reply: try common key paths
+    reply = None
+    for key in ("response", "message", "output", "text", "content"):
+        val = data.get(key)
+        if isinstance(val, str):
+            reply = val
+            break
+        if isinstance(val, dict):
+            for inner_key in ("content", "message", "text", "response"):
+                inner = val.get(inner_key)
+                if isinstance(inner, str):
+                    reply = inner
+                    break
+            if reply:
+                break
+
+    if not reply:
+        reply = str(data)
+
+    # Clean literal \n (API sometimes returns escaped newlines)
+    reply = reply.replace("\\n", "\n")
+
     conv_id = data.get("conversation_id", conversation_id or "")
     return reply, conv_id
 

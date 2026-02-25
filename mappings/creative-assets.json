@@ -8,7 +8,7 @@
       "headline":        { "type": "text", "fields": { "keyword": { "type": "keyword" } } },
       "description":     { "type": "semantic_text", "inference_id": "__INFERENCE_ID__" },
       "status":          { "type": "keyword" },
-      "created_date":    { "type": "date", "format": "yyyy-MM-dd" },
+      "created_date":    { "type": "date", "format": "yyyy-MM-dd||strict_date_optional_time||epoch_millis" },
       "fatigue_score":   { "type": "float" },
       "ctr":             { "type": "float" },
       "impressions":     { "type": "long" }

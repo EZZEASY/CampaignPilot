@@ -3,7 +3,7 @@
     "properties": {
       "campaign_id":   { "type": "keyword" },
       "channel":       { "type": "keyword" },
-      "date":          { "type": "date", "format": "yyyy-MM-dd" },
+      "date":          { "type": "date", "format": "yyyy-MM-dd||strict_date_optional_time||epoch_millis" },
       "impressions":   { "type": "long" },
       "clicks":        { "type": "long" },
       "conversions":   { "type": "integer" },

@@ -7,8 +7,8 @@
       "objective":      { "type": "keyword" },
       "vertical":       { "type": "keyword" },
       "status":         { "type": "keyword" },
-      "start_date":     { "type": "date", "format": "yyyy-MM-dd" },
-      "end_date":       { "type": "date", "format": "yyyy-MM-dd" },
+      "start_date":     { "type": "date", "format": "yyyy-MM-dd||strict_date_optional_time||epoch_millis" },
+      "end_date":       { "type": "date", "format": "yyyy-MM-dd||strict_date_optional_time||epoch_millis" },
       "monthly_budget": { "type": "float" },
       "description":    { "type": "semantic_text", "inference_id": "__INFERENCE_ID__" }
     }

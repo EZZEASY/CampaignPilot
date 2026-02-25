@@ -2,7 +2,7 @@
   "mappings": {
     "properties": {
       "signal_id":         { "type": "keyword" },
-      "date":              { "type": "date", "format": "yyyy-MM-dd" },
+      "date":              { "type": "date", "format": "yyyy-MM-dd||strict_date_optional_time||epoch_millis" },
       "competitor":        { "type": "keyword" },
       "signal_type":       { "type": "keyword" },
       "channel":           { "type": "keyword" },

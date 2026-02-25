@@ -3,4 +3,5 @@ faker
 python-dotenv
 openai>=1.12
 streamlit>=1.30
+plotly>=5.14
 requests>=2.31
