@@ -1,0 +1,16 @@
+{
+  "mappings": {
+    "properties": {
+      "campaign_id":           { "type": "keyword" },
+      "channel":               { "type": "keyword" },
+      "date":                  { "type": "date", "format": "yyyy-MM-dd" },
+      "daily_budget":          { "type": "float" },
+      "actual_spend":          { "type": "float" },
+      "cumulative_spend":      { "type": "float" },
+      "monthly_budget":        { "type": "float" },
+      "pace_ratio":            { "type": "float" },
+      "projected_overspend":   { "type": "float" },
+      "remaining_budget":      { "type": "float" }
+    }
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "mappings": {
+    "properties": {
+      "asset_id":        { "type": "keyword" },
+      "campaign_id":     { "type": "keyword" },
+      "channel":         { "type": "keyword" },
+      "asset_type":      { "type": "keyword" },
+      "headline":        { "type": "text", "fields": { "keyword": { "type": "keyword" } } },
+      "description":     { "type": "semantic_text", "inference_id": "__INFERENCE_ID__" },
+      "status":          { "type": "keyword" },
+      "created_date":    { "type": "date", "format": "yyyy-MM-dd" },
+      "fatigue_score":   { "type": "float" },
+      "ctr":             { "type": "float" },
+      "impressions":     { "type": "long" }
+    }
+  }
+}

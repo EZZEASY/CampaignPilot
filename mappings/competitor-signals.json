@@ -1,0 +1,16 @@
+{
+  "mappings": {
+    "properties": {
+      "signal_id":         { "type": "keyword" },
+      "date":              { "type": "date", "format": "yyyy-MM-dd" },
+      "competitor":        { "type": "keyword" },
+      "signal_type":       { "type": "keyword" },
+      "channel":           { "type": "keyword" },
+      "description":       { "type": "semantic_text", "inference_id": "__INFERENCE_ID__" },
+      "impact_level":      { "type": "keyword" },
+      "impression_share":  { "type": "float" },
+      "estimated_spend":   { "type": "float" },
+      "avg_cpc":           { "type": "float" }
+    }
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "mappings": {
+    "properties": {
+      "campaign_id":   { "type": "keyword" },
+      "channel":       { "type": "keyword" },
+      "date":          { "type": "date", "format": "yyyy-MM-dd" },
+      "impressions":   { "type": "long" },
+      "clicks":        { "type": "long" },
+      "conversions":   { "type": "integer" },
+      "spend":         { "type": "float" },
+      "cpa":           { "type": "float" },
+      "ctr":           { "type": "float" },
+      "roas":          { "type": "float" },
+      "revenue":       { "type": "float" }
+    }
+  }
+}

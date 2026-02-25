@@ -1,0 +1,16 @@
+{
+  "mappings": {
+    "properties": {
+      "campaign_id":    { "type": "keyword" },
+      "campaign_name":  { "type": "text", "fields": { "keyword": { "type": "keyword" } } },
+      "channel":        { "type": "keyword" },
+      "objective":      { "type": "keyword" },
+      "vertical":       { "type": "keyword" },
+      "status":         { "type": "keyword" },
+      "start_date":     { "type": "date", "format": "yyyy-MM-dd" },
+      "end_date":       { "type": "date", "format": "yyyy-MM-dd" },
+      "monthly_budget": { "type": "float" },
+      "description":    { "type": "semantic_text", "inference_id": "__INFERENCE_ID__" }
+    }
+  }
+}

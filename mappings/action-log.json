@@ -1,0 +1,15 @@
+{
+  "mappings": {
+    "properties": {
+      "action_id":     { "type": "keyword" },
+      "campaign_id":   { "type": "keyword" },
+      "channel":       { "type": "keyword" },
+      "action_type":   { "type": "keyword" },
+      "status":        { "type": "keyword" },
+      "timestamp":     { "type": "date" },
+      "description":   { "type": "semantic_text", "inference_id": "__INFERENCE_ID__" },
+      "parameters":    { "type": "object", "enabled": false },
+      "outcome":       { "type": "text" }
+    }
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "mappings": {
+    "properties": {
+      "campaign_id":       { "type": "keyword" },
+      "segment":           { "type": "keyword" },
+      "date":              { "type": "date", "format": "yyyy-MM-dd" },
+      "reach":             { "type": "long" },
+      "impressions":       { "type": "long" },
+      "clicks":            { "type": "long" },
+      "conversions":       { "type": "integer" },
+      "conversion_rate":   { "type": "float" },
+      "churn_risk":        { "type": "float" },
+      "engagement_score":  { "type": "float" }
+    }
+  }
+}
