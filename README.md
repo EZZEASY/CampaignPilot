@@ -28,7 +28,7 @@ graph TB
     Agent -->|Primary| Kibana[Elastic AI Assistant<br/>Kibana Agent Builder]
     Agent -->|Fallback| OpenRouter[OpenRouter LLM]
 
-    Kibana --> Tools[14 ES|QL Tools]
+    Kibana --> Tools["14 ES|QL Tools"]
     OpenRouter --> Tools
 
     Tools --> ES[(Elasticsearch<br/>11 Indices)]
