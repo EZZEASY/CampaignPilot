@@ -21,31 +21,30 @@ graph TB
     User([User])
     User --> Dashboard[Streamlit Dashboard<br/>4 Tabs]
     User --> CLI[CLI Agent]
+    User --> KibanaUI[Kibana<br/>AI Assistant]
 
-    Dashboard --> Agent{AI Agent}
-    CLI --> Agent
+    Dashboard --> LLM
+    CLI --> LLM
+    KibanaUI --> LLM
 
-    Agent -->|Primary| Kibana[Elastic AI Assistant<br/>Kibana Agent Builder]
-    Agent -->|Fallback| OpenRouter[OpenRouter LLM]
-
-    Kibana --> Tools["14 ES|QL Tools"]
-    OpenRouter --> Tools
-
+    LLM["LLM Agent<br/>Orchestration"] --> Workflows["Workflows<br/>Anomaly Scan · Campaign Health"]
+    LLM --> Tools["14 ES|QL Tools"]
+    Workflows --> Tools
     Tools --> ES[(Elasticsearch<br/>11 Indices)]
 
     subgraph Frontend
         Dashboard
         CLI
+        KibanaUI
     end
 
     subgraph Agent Layer
-        Agent
-        Kibana
-        OpenRouter
+        LLM
+        Workflows
+        Tools
     end
 
     subgraph Data Layer
-        Tools
         ES
     end
 ```
