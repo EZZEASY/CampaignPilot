@@ -137,12 +137,16 @@ PLOTLY_LAYOUT = dict(
     yaxis=dict(gridcolor="rgba(0,0,0,0.08)"),
 )
 
+def safe_md(text: str) -> str:
+    """Escape $ signs to prevent Streamlit LaTeX rendering."""
+    return str(text).replace("$", "\\$")
+
 CHANNEL_COLORS = {
-    "google": "#4285F4",
-    "meta": "#1877F2",
-    "tiktok": "#25F4EE",
+    "google_ads": "#4285F4",
+    "meta_ads": "#1877F2",
+    "tiktok_ads": "#25F4EE",
     "email": "#48BB78",
-    "linkedin": "#0A66C2",
+    "linkedin_ads": "#0A66C2",
 }
 
 # ---------------------------------------------------------------------------
@@ -237,216 +241,247 @@ with tab_dashboard:
                 f"{t.get('total_clicks', 0):,}",
                 delta=pct_delta(e.get('clicks'), l.get('clicks')),
             )
+        st.caption("Delta compares Feb 13–25 vs Feb 1–12")
     except Exception as exc:
         st.error(f"Failed to load KPIs: {exc}")
 
     st.divider()
 
-    # Daily trend chart — Plotly
-    st.subheader("Daily Spend & Conversions Trend")
-    try:
-        daily = run_esql(
-            'FROM channel-metrics'
-            ' | STATS daily_spend = SUM(spend), daily_conv = SUM(conversions),'
-            ' daily_clicks = SUM(clicks)'
-            ' BY date'
-            ' | SORT date ASC | LIMIT 60'
-        )
-        if daily:
-            df = pd.DataFrame(daily)
-            df["date"] = pd.to_datetime(df["date"])
-            df = df.sort_values("date")
-
-            col_l, col_r = st.columns(2)
-            with col_l:
-                fig_spend = go.Figure()
-                fig_spend.add_trace(go.Scatter(
-                    x=df["date"], y=df["daily_spend"],
-                    mode="lines+markers",
-                    fill="tozeroy",
-                    line=dict(color="#4285F4", width=2),
-                    marker=dict(size=4),
-                    name="Daily Spend",
-                ))
-                fig_spend.update_layout(
-                    title="Daily Spend ($)",
-                    **PLOTLY_LAYOUT,
-                )
-                st.plotly_chart(fig_spend, use_container_width=True)
-
-            with col_r:
-                fig_conv = go.Figure()
-                fig_conv.add_trace(go.Scatter(
-                    x=df["date"], y=df["daily_conv"],
-                    mode="lines+markers",
-                    fill="tozeroy",
-                    line=dict(color="#48BB78", width=2),
-                    marker=dict(size=4),
-                    name="Daily Conversions",
-                ))
-                fig_conv.update_layout(
-                    title="Daily Conversions",
-                    **PLOTLY_LAYOUT,
-                )
-                st.plotly_chart(fig_conv, use_container_width=True)
-    except Exception as exc:
-        st.error(f"Failed to load daily trends: {exc}")
-
-    # Channel breakdown — Plotly
-    st.subheader("Channel Performance")
-    try:
-        by_channel = run_esql(
-            'FROM channel-metrics'
-            ' | STATS total_spend = SUM(spend), avg_cpa = AVG(cpa),'
-            ' avg_roas = AVG(roas), total_conv = SUM(conversions)'
-            ' BY channel'
-            ' | SORT total_spend DESC'
-        )
-        if by_channel:
-            df_ch = pd.DataFrame(by_channel)
-
-            # Formatted data table
-            df_display = df_ch.copy()
-            df_display["total_spend"] = df_display["total_spend"].apply(lambda v: f"${v:,.0f}")
-            df_display["avg_cpa"] = df_display["avg_cpa"].apply(lambda v: f"${v:,.2f}")
-            df_display["avg_roas"] = df_display["avg_roas"].apply(lambda v: f"{v:.2f}x")
-            df_display["total_conv"] = df_display["total_conv"].apply(lambda v: f"{v:,.0f}")
-            st.dataframe(df_display, use_container_width=True, hide_index=True)
-
-            colors = [CHANNEL_COLORS.get(ch.lower(), "#8884d8") for ch in df_ch["channel"]]
-
-            col_l2, col_r2 = st.columns(2)
-            with col_l2:
-                fig_spend_ch = go.Figure()
-                fig_spend_ch.add_trace(go.Bar(
-                    x=df_ch["channel"],
-                    y=df_ch["total_spend"],
-                    marker_color=colors,
-                    text=df_ch["total_spend"].apply(lambda v: f"${v:,.0f}"),
-                    textposition="outside",
-                ))
-                fig_spend_ch.update_layout(
-                    title="Spend by Channel",
-                    **PLOTLY_LAYOUT,
-                )
-                st.plotly_chart(fig_spend_ch, use_container_width=True)
-
-            with col_r2:
-                fig_roas_ch = go.Figure()
-                fig_roas_ch.add_trace(go.Bar(
-                    x=df_ch["channel"],
-                    y=df_ch["avg_roas"],
-                    marker_color=colors,
-                    text=df_ch["avg_roas"].apply(lambda v: f"{v:.2f}x"),
-                    textposition="outside",
-                ))
-                fig_roas_ch.update_layout(
-                    title="Avg ROAS by Channel",
-                    **PLOTLY_LAYOUT,
-                )
-                st.plotly_chart(fig_roas_ch, use_container_width=True)
-    except Exception as exc:
-        st.error(f"Failed to load channel data: {exc}")
-
-    # Website Health panel (v2.1)
-    st.divider()
-    st.subheader("Website Health")
-    try:
-        website_data = run_esql(
-            'FROM website-events'
-            ' | WHERE @timestamp >= NOW() - 24 hours'
-            ' | STATS avg_load = AVG(load_time_ms),'
-            ' bounce_rate = AVG(CASE(bounce == true, 1, 0)),'
-            ' conv_rate = AVG(CASE(converted == true, 1, 0)),'
-            ' timeout_rate = AVG(CASE(timeout == true, 1, 0)),'
-            ' total_sessions = COUNT(*)'
-            ' BY page_url, cdn_status'
-            ' | SORT avg_load DESC | LIMIT 20'
-        )
-        if website_data:
-            for row in website_data:
-                avg_load = row.get("avg_load", 0)
-                timeout_rate = row.get("timeout_rate", 0)
-                if avg_load > 5000 or timeout_rate > 0.10:
-                    row["health"] = "CRITICAL"
-                elif avg_load > 3000:
-                    row["health"] = "SLOW"
-                else:
-                    row["health"] = "HEALTHY"
-
-            # Status cards
-            health_counts = {"CRITICAL": 0, "SLOW": 0, "HEALTHY": 0}
-            for row in website_data:
-                health_counts[row["health"]] = health_counts.get(row["health"], 0) + 1
-
-            wc1, wc2, wc3 = st.columns(3)
-            wc1.metric("Critical Pages", health_counts.get("CRITICAL", 0))
-            wc2.metric("Slow Pages", health_counts.get("SLOW", 0))
-            wc3.metric("Healthy Pages", health_counts.get("HEALTHY", 0))
-
-            # Data table
-            df_web = pd.DataFrame(website_data)
-            display_cols = [c for c in ["page_url", "health", "avg_load", "bounce_rate", "conv_rate", "cdn_status", "total_sessions"] if c in df_web.columns]
-            if "avg_load" in df_web.columns:
-                df_web["avg_load"] = df_web["avg_load"].apply(lambda v: f"{v:,.0f} ms")
-            if "bounce_rate" in df_web.columns:
-                df_web["bounce_rate"] = df_web["bounce_rate"].apply(lambda v: f"{v:.1%}")
-            if "conv_rate" in df_web.columns:
-                df_web["conv_rate"] = df_web["conv_rate"].apply(lambda v: f"{v:.1%}")
-            st.dataframe(df_web[display_cols], use_container_width=True, hide_index=True)
-        else:
-            st.info("No website event data available.")
-    except Exception as exc:
-        st.warning(f"Website health data not available: {exc}")
-
-    # Support Pulse panel (v2.1)
-    st.divider()
-    st.subheader("Support Pulse")
-    try:
-        support_daily = run_esql(
-            'FROM support-tickets'
-            ' | STATS daily_tickets = COUNT(*), avg_sentiment = AVG(sentiment)'
-            ' BY date'
-            ' | SORT date ASC | LIMIT 30'
-        )
-        if support_daily:
-            df_support = pd.DataFrame(support_daily)
-            df_support["date"] = pd.to_datetime(df_support["date"])
-            df_support = df_support.sort_values("date")
-
-            from plotly.subplots import make_subplots
-
-            fig_support = make_subplots(specs=[[{"secondary_y": True}]])
-            fig_support.add_trace(
-                go.Bar(
-                    x=df_support["date"], y=df_support["daily_tickets"],
-                    name="Daily Tickets",
-                    marker_color="#E53E3E",
-                    opacity=0.7,
-                ),
-                secondary_y=False,
+    # --- Daily Trends & Channel Performance (collapsible, expanded by default) ---
+    with st.expander("📈 Daily Trends & Channel Performance", expanded=True):
+        try:
+            daily = run_esql(
+                'FROM channel-metrics'
+                ' | STATS daily_spend = SUM(spend), daily_conv = SUM(conversions),'
+                ' daily_clicks = SUM(clicks)'
+                ' BY date'
+                ' | SORT date ASC | LIMIT 60'
             )
-            fig_support.add_trace(
-                go.Scatter(
-                    x=df_support["date"], y=df_support["avg_sentiment"],
-                    name="Avg Sentiment",
-                    line=dict(color="#4285F4", width=2),
-                    mode="lines+markers",
-                    marker=dict(size=4),
-                ),
-                secondary_y=True,
+            if daily:
+                df = pd.DataFrame(daily)
+                df["date"] = pd.to_datetime(df["date"])
+                df = df.sort_values("date")
+
+                col_l, col_r = st.columns(2)
+                with col_l:
+                    fig_spend = go.Figure()
+                    fig_spend.add_trace(go.Scatter(
+                        x=df["date"], y=df["daily_spend"],
+                        mode="lines+markers",
+                        fill="tozeroy",
+                        line=dict(color="#4285F4", width=2),
+                        marker=dict(size=4),
+                        name="Daily Spend",
+                    ))
+                    fig_spend.update_layout(
+                        title="Daily Spend ($)",
+                        **PLOTLY_LAYOUT,
+                    )
+                    st.plotly_chart(fig_spend, use_container_width=True)
+
+                with col_r:
+                    fig_conv = go.Figure()
+                    fig_conv.add_trace(go.Scatter(
+                        x=df["date"], y=df["daily_conv"],
+                        mode="lines+markers",
+                        fill="tozeroy",
+                        line=dict(color="#48BB78", width=2),
+                        marker=dict(size=4),
+                        name="Daily Conversions",
+                    ))
+                    fig_conv.update_layout(
+                        title="Daily Conversions",
+                        **PLOTLY_LAYOUT,
+                    )
+                    st.plotly_chart(fig_conv, use_container_width=True)
+        except Exception as exc:
+            st.error(f"Failed to load daily trends: {exc}")
+
+        # Channel breakdown — Plotly
+        st.subheader("Channel Performance")
+        try:
+            by_channel = run_esql(
+                'FROM channel-metrics'
+                ' | STATS total_spend = SUM(spend), avg_cpa = AVG(cpa),'
+                ' avg_roas = AVG(roas), total_conv = SUM(conversions)'
+                ' BY channel'
+                ' | SORT total_spend DESC'
             )
-            fig_support.update_layout(
-                title="Daily Support Tickets & Sentiment",
-                **PLOTLY_LAYOUT,
+            if by_channel:
+                df_ch = pd.DataFrame(by_channel)
+
+                # Formatted data table
+                df_display = df_ch.copy()
+                df_display["total_spend"] = df_display["total_spend"].apply(lambda v: f"${v:,.0f}")
+                df_display["avg_cpa"] = df_display["avg_cpa"].apply(lambda v: f"${v:,.2f}")
+                df_display["avg_roas"] = df_display["avg_roas"].apply(lambda v: f"{v:.2f}x")
+                df_display["total_conv"] = df_display["total_conv"].apply(lambda v: f"{v:,.0f}")
+                st.dataframe(df_display, use_container_width=True, hide_index=True, column_config={
+                    "channel": st.column_config.TextColumn("Channel"),
+                    "total_spend": st.column_config.TextColumn("Total Spend"),
+                    "avg_cpa": st.column_config.TextColumn("Avg CPA"),
+                    "avg_roas": st.column_config.TextColumn("Avg ROAS"),
+                    "total_conv": st.column_config.TextColumn("Total Conversions"),
+                })
+
+                colors = [CHANNEL_COLORS.get(ch.lower(), "#8884d8") for ch in df_ch["channel"]]
+
+                col_l2, col_r2 = st.columns(2)
+                with col_l2:
+                    fig_spend_ch = go.Figure()
+                    fig_spend_ch.add_trace(go.Bar(
+                        x=df_ch["channel"],
+                        y=df_ch["total_spend"],
+                        marker_color=colors,
+                        text=df_ch["total_spend"].apply(lambda v: f"${v:,.0f}"),
+                        textposition="outside",
+                    ))
+                    fig_spend_ch.update_layout(
+                        title="Spend by Channel",
+                        **PLOTLY_LAYOUT,
+                    )
+                    st.plotly_chart(fig_spend_ch, use_container_width=True)
+
+                with col_r2:
+                    fig_roas_ch = go.Figure()
+                    fig_roas_ch.add_trace(go.Bar(
+                        x=df_ch["channel"],
+                        y=df_ch["avg_roas"],
+                        marker_color=colors,
+                        text=df_ch["avg_roas"].apply(lambda v: f"{v:.2f}x"),
+                        textposition="outside",
+                    ))
+                    fig_roas_ch.update_layout(
+                        title="Avg ROAS by Channel",
+                        **PLOTLY_LAYOUT,
+                    )
+                    st.plotly_chart(fig_roas_ch, use_container_width=True)
+        except Exception as exc:
+            st.error(f"Failed to load channel data: {exc}")
+
+    # --- Website Health & Support Pulse (collapsible, collapsed by default) ---
+    with st.expander("🌐 Website Health & Support Pulse", expanded=False):
+        st.subheader("Website Health")
+        try:
+            website_data = run_esql(
+                'FROM website-events'
+                ' | WHERE @timestamp >= NOW() - 24 hours'
+                ' | STATS avg_load = AVG(load_time_ms),'
+                ' bounce_rate = AVG(CASE(bounce == true, 1, 0)),'
+                ' conv_rate = AVG(CASE(converted == true, 1, 0)),'
+                ' timeout_rate = AVG(CASE(timeout == true, 1, 0)),'
+                ' total_sessions = COUNT(*)'
+                ' BY page_url, cdn_status'
+                ' | SORT avg_load DESC | LIMIT 20'
             )
-            fig_support.update_yaxes(title_text="Ticket Count", secondary_y=False)
-            fig_support.update_yaxes(title_text="Avg Sentiment", secondary_y=True)
-            st.plotly_chart(fig_support, use_container_width=True)
-        else:
-            st.info("No support ticket data available.")
-    except Exception as exc:
-        st.warning(f"Support pulse data not available: {exc}")
+            if website_data:
+                for row in website_data:
+                    avg_load = row.get("avg_load", 0)
+                    timeout_rate = row.get("timeout_rate", 0)
+                    if avg_load > 5000 or timeout_rate > 0.10:
+                        row["health"] = "CRITICAL"
+                    elif avg_load > 3000:
+                        row["health"] = "SLOW"
+                    else:
+                        row["health"] = "HEALTHY"
+
+                # Status cards
+                health_counts = {"CRITICAL": 0, "SLOW": 0, "HEALTHY": 0}
+                for row in website_data:
+                    health_counts[row["health"]] = health_counts.get(row["health"], 0) + 1
+
+                wc1, wc2, wc3 = st.columns(3)
+                wc1.markdown(
+                    f'<div style="background:#FED7D7;border-radius:8px;padding:12px 16px;text-align:center">'
+                    f'<span style="color:#9B2C2C;font-size:0.85rem;text-transform:uppercase">Critical Pages</span><br>'
+                    f'<span style="color:#C53030;font-size:1.6rem;font-weight:700">{health_counts.get("CRITICAL", 0)}</span></div>',
+                    unsafe_allow_html=True,
+                )
+                wc2.markdown(
+                    f'<div style="background:#FEFCBF;border-radius:8px;padding:12px 16px;text-align:center">'
+                    f'<span style="color:#975A16;font-size:0.85rem;text-transform:uppercase">Slow Pages</span><br>'
+                    f'<span style="color:#B7791F;font-size:1.6rem;font-weight:700">{health_counts.get("SLOW", 0)}</span></div>',
+                    unsafe_allow_html=True,
+                )
+                wc3.markdown(
+                    f'<div style="background:#C6F6D5;border-radius:8px;padding:12px 16px;text-align:center">'
+                    f'<span style="color:#276749;font-size:0.85rem;text-transform:uppercase">Healthy Pages</span><br>'
+                    f'<span style="color:#2F855A;font-size:1.6rem;font-weight:700">{health_counts.get("HEALTHY", 0)}</span></div>',
+                    unsafe_allow_html=True,
+                )
+
+                # Data table
+                df_web = pd.DataFrame(website_data)
+                display_cols = [c for c in ["page_url", "health", "avg_load", "bounce_rate", "conv_rate", "cdn_status", "total_sessions"] if c in df_web.columns]
+                if "avg_load" in df_web.columns:
+                    df_web["avg_load"] = df_web["avg_load"].apply(lambda v: f"{v:,.0f} ms")
+                if "bounce_rate" in df_web.columns:
+                    df_web["bounce_rate"] = df_web["bounce_rate"].apply(lambda v: f"{v:.1%}")
+                if "conv_rate" in df_web.columns:
+                    df_web["conv_rate"] = df_web["conv_rate"].apply(lambda v: f"{v:.1%}")
+                st.dataframe(df_web[display_cols], use_container_width=True, hide_index=True, column_config={
+                    "page_url": st.column_config.TextColumn("Page URL"),
+                    "health": st.column_config.TextColumn("Health"),
+                    "avg_load": st.column_config.TextColumn("Avg Load Time"),
+                    "bounce_rate": st.column_config.TextColumn("Bounce Rate"),
+                    "conv_rate": st.column_config.TextColumn("Conv Rate"),
+                    "cdn_status": st.column_config.TextColumn("CDN Status"),
+                    "total_sessions": st.column_config.NumberColumn("Total Sessions"),
+                })
+            else:
+                st.info("No website event data available.")
+        except Exception as exc:
+            st.warning(f"Website health data not available: {exc}")
+
+        # Support Pulse panel (v2.1)
+        st.divider()
+        st.subheader("Support Pulse")
+        try:
+            support_daily = run_esql(
+                'FROM support-tickets'
+                ' | STATS daily_tickets = COUNT(*), avg_sentiment = AVG(sentiment)'
+                ' BY date'
+                ' | SORT date ASC | LIMIT 30'
+            )
+            if support_daily:
+                df_support = pd.DataFrame(support_daily)
+                df_support["date"] = pd.to_datetime(df_support["date"])
+                df_support = df_support.sort_values("date")
+
+                from plotly.subplots import make_subplots
+
+                fig_support = make_subplots(specs=[[{"secondary_y": True}]])
+                fig_support.add_trace(
+                    go.Bar(
+                        x=df_support["date"], y=df_support["daily_tickets"],
+                        name="Daily Tickets",
+                        marker_color="#E53E3E",
+                        opacity=0.7,
+                    ),
+                    secondary_y=False,
+                )
+                fig_support.add_trace(
+                    go.Scatter(
+                        x=df_support["date"], y=df_support["avg_sentiment"],
+                        name="Avg Sentiment",
+                        line=dict(color="#4285F4", width=2),
+                        mode="lines+markers",
+                        marker=dict(size=4),
+                    ),
+                    secondary_y=True,
+                )
+                support_layout = {**PLOTLY_LAYOUT, "margin": dict(l=40, r=60, t=40, b=40)}
+                fig_support.update_layout(
+                    title="Daily Support Tickets & Sentiment",
+                    **support_layout,
+                )
+                fig_support.update_yaxes(title_text="Ticket Count", secondary_y=False)
+                fig_support.update_yaxes(title_text="Avg Sentiment", secondary_y=True)
+                st.plotly_chart(fig_support, use_container_width=True)
+            else:
+                st.info("No support ticket data available.")
+        except Exception as exc:
+            st.warning(f"Support pulse data not available: {exc}")
 
 
 # ===== TAB 2: Anomaly Alerts =====
@@ -475,13 +510,41 @@ with tab_alerts:
 
         st.divider()
 
-        for alert in scan_result["alerts"]:
+        # --- Alert filters ---
+        filter_col1, filter_col2 = st.columns(2)
+        with filter_col1:
+            severity_filter = st.selectbox(
+                "Severity", ["all", "high", "medium", "low"], key="alert_sev_filter"
+            )
+        with filter_col2:
+            alert_types = sorted({a.get("alert_type", "unknown") for a in scan_result["alerts"]})
+            type_options = ["all"] + [t.replace("_", " ").title() for t in alert_types]
+            type_filter = st.selectbox("Alert Type", type_options, key="alert_type_filter")
+
+        filtered_alerts = scan_result["alerts"]
+        if severity_filter != "all":
+            filtered_alerts = [a for a in filtered_alerts if a.get("severity") == severity_filter]
+        if type_filter != "all":
+            filtered_alerts = [
+                a for a in filtered_alerts
+                if a.get("alert_type", "unknown").replace("_", " ").title() == type_filter
+            ]
+
+        high_count_shown = 0
+        for alert in filtered_alerts:
             sev = alert.get("severity", "low")
             icon = "🔴" if sev == "high" else "🟡" if sev == "medium" else "🟢"
             alert_type = alert.get("alert_type", "unknown").replace("_", " ").title()
             campaign_name = alert.get("campaign_name", alert.get("campaign_id", "N/A"))
 
-            with st.expander(f"{icon} {alert_type} — {campaign_name}", expanded=(sev == "high")):
+            # Expand only first 3 high-severity alerts
+            if sev == "high" and high_count_shown < 3:
+                expand = True
+                high_count_shown += 1
+            else:
+                expand = False
+
+            with st.expander(f"{icon} {alert_type} — {campaign_name}", expanded=expand):
                 # Build detail items dynamically
                 detail_items = {}
                 for key in ["campaign_id", "channel", "metric", "pct_change",
@@ -496,6 +559,12 @@ with tab_alerts:
                                 val = f"{val:.2f}"
                             else:
                                 val = f"{val:,.2f}"
+                        elif key == "latest_date" and isinstance(val, str) and "T" in val:
+                            try:
+                                from datetime import datetime as _dt
+                                val = _dt.fromisoformat(val.replace("Z", "+00:00")).strftime("%Y-%m-%d %H:%M")
+                            except ValueError:
+                                pass
                         detail_items[label] = val
 
                 # Two-column detail layout with color bar
@@ -518,7 +587,16 @@ with tab_alerts:
 
 # ===== TAB 3: Chat with Agent =====
 with tab_chat:
-    st.header("Chat with CampaignPilot")
+    # Header row with clear button
+    chat_title_col, chat_btn_col = st.columns([6, 1])
+    with chat_title_col:
+        st.header("Chat with CampaignPilot")
+    with chat_btn_col:
+        if st.button("🗑️ Clear", key="clear_chat_btn"):
+            st.session_state["chat_messages"] = []
+            st.session_state["chat_history"] = None
+            st.session_state["conversation_id"] = None
+            st.rerun()
 
     # Detect backend mode
     kibana_url = os.environ.get("KIBANA_URL", "").strip()
@@ -528,9 +606,9 @@ with tab_chat:
     has_openrouter = bool(openrouter_key)
 
     if has_agent_builder:
-        st.caption("Mode: Agent Builder (Kibana)")
+        st.caption("Powered by Elastic AI Assistant")
     elif has_openrouter:
-        st.caption("Mode: OpenRouter")
+        st.caption("Powered by OpenRouter LLM")
     else:
         st.warning(
             "No chat backend configured. Set **KIBANA_URL + KIBANA_API_KEY** "
@@ -545,10 +623,27 @@ with tab_chat:
     if "conversation_id" not in st.session_state:
         st.session_state["conversation_id"] = None
 
+    # Suggested questions when chat is empty
+    if not st.session_state["chat_messages"] and (has_agent_builder or has_openrouter):
+        st.markdown("**Try asking:**")
+        suggestions = [
+            "Are there any anomalies across campaigns?",
+            "Which channel has the best ROAS?",
+            "Show me budget pacing for this month",
+            "Any creative fatigue issues?",
+        ]
+        sg_cols = st.columns(len(suggestions))
+        for i, suggestion in enumerate(suggestions):
+            with sg_cols[i]:
+                if st.button(suggestion, key=f"suggest_{i}"):
+                    st.session_state["chat_messages"].append({"role": "user", "content": suggestion})
+                    st.session_state["_pending_input"] = suggestion
+                    st.rerun()
+
     # Display chat history
     for msg in st.session_state["chat_messages"]:
         with st.chat_message(msg["role"]):
-            st.markdown(msg["content"])
+            st.markdown(safe_md(msg["content"]))
 
     # Chat input — disabled when no backend
     user_input = st.chat_input(
