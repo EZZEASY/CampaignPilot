@@ -107,12 +107,16 @@ ESQL_TOOLS = [
     },
     {
         "id": "cp-fatigued-creatives",
-        "description": "Fatigued Creatives — Find creative assets with high fatigue scores. High fatigue indicates declining performance and need for creative refresh.",
+        "description": "Fatigued Creatives — Find creatives with high fatigue scores from daily metrics. High fatigue indicates declining CTR and need for creative refresh.",
         "type": "esql",
         "configuration": {
             "query": (
-                'FROM creative-assets | WHERE fatigue_score > ?threshold'
-                ' | SORT fatigue_score DESC | LIMIT 20'
+                'FROM creative-metrics'
+                ' | STATS avg_fatigue=AVG(fatigue_score), avg_ctr=AVG(ctr),'
+                ' avg_cpa=AVG(cpa), total_spend=SUM(spend)'
+                ' BY creative_id, campaign_id, ad_group_id, channel'
+                ' | WHERE avg_fatigue > ?threshold'
+                ' | SORT avg_fatigue DESC | LIMIT 20'
             ),
             "params": {
                 "threshold": {"type": "float", "description": "Fatigue score threshold (0-1, default 0.7)"},
@@ -164,6 +168,93 @@ ESQL_TOOLS = [
             },
         },
     },
+    {
+        "id": "cp-website-health",
+        "description": "Website Health — Check landing page performance (load times, CDN status, session count). Pages with avg_load > 5000ms are CRITICAL.",
+        "type": "esql",
+        "configuration": {
+            "query": (
+                'FROM website-events | WHERE date >= ?date_from'
+                ' | STATS avg_load=AVG(load_time_ms),'
+                ' total_sessions=COUNT(*)'
+                ' BY page_url, cdn_status'
+                ' | SORT avg_load DESC | LIMIT 20'
+            ),
+            "params": {
+                "date_from": {"type": "date", "description": "Start date (yyyy-MM-dd), e.g. 2026-02-18"},
+            },
+        },
+    },
+    {
+        "id": "cp-product-changes",
+        "description": "Product Changes — Find recent product catalog events (price changes, out-of-stock). Useful for root cause analysis of conversion drops.",
+        "type": "esql",
+        "configuration": {
+            "query": (
+                'FROM product-catalog'
+                ' | WHERE event_type IN ("price_change", "out_of_stock")'
+                ' AND date >= ?date_from'
+                ' | SORT date DESC | LIMIT 50'
+            ),
+            "params": {
+                "date_from": {"type": "date", "description": "Start date (yyyy-MM-dd), e.g. 2026-02-10"},
+            },
+        },
+    },
+    {
+        "id": "cp-support-sentiment",
+        "description": "Support Sentiment — Aggregate customer support ticket volume and sentiment by category. Detects complaint surges.",
+        "type": "esql",
+        "configuration": {
+            "query": (
+                'FROM support-tickets | WHERE date >= ?date_from'
+                ' | STATS total_tickets=COUNT(*), avg_sentiment=AVG(sentiment)'
+                ' BY category'
+                ' | SORT total_tickets DESC | LIMIT 20'
+            ),
+            "params": {
+                "date_from": {"type": "date", "description": "Start date (yyyy-MM-dd), e.g. 2026-02-18"},
+            },
+        },
+    },
+    {
+        "id": "cp-creative-fatigue",
+        "description": "Creative Fatigue — Find creatives with high fatigue scores from creative-metrics timeseries. Returns avg fatigue, CTR, CPA by creative.",
+        "type": "esql",
+        "configuration": {
+            "query": (
+                'FROM creative-metrics'
+                ' | STATS avg_fatigue=AVG(fatigue_score), avg_ctr=AVG(ctr),'
+                ' avg_cpa=AVG(cpa), total_spend=SUM(spend)'
+                ' BY creative_id, campaign_id, ad_group_id, channel'
+                ' | WHERE avg_fatigue > ?threshold'
+                ' | SORT avg_fatigue DESC | LIMIT 20'
+            ),
+            "params": {
+                "threshold": {"type": "float", "description": "Fatigue score threshold (0-1, default 0.7)"},
+            },
+        },
+    },
+    {
+        "id": "cp-drill-down-ad-group",
+        "description": "Ad Group Drill-Down — Breakdown of ad group performance for a campaign. Shows CTR, CPA, fatigue, spend per ad group.",
+        "type": "esql",
+        "configuration": {
+            "query": (
+                'FROM creative-metrics | WHERE campaign_id == ?campaign_id'
+                ' AND date >= ?date_from'
+                ' | STATS avg_ctr=AVG(ctr), avg_cpa=AVG(cpa),'
+                ' avg_fatigue=AVG(fatigue_score),'
+                ' total_spend=SUM(spend), total_conv=SUM(conversions)'
+                ' BY ad_group_id, channel'
+                ' | SORT avg_fatigue DESC | LIMIT 20'
+            ),
+            "params": {
+                "campaign_id": {"type": "string", "description": "Campaign ID"},
+                "date_from": {"type": "date", "description": "Start date (yyyy-MM-dd), e.g. 2026-02-18"},
+            },
+        },
+    },
 ]
 
 INDEX_SEARCH_TOOLS = [
@@ -189,6 +280,14 @@ INDEX_SEARCH_TOOLS = [
         "type": "index_search",
         "configuration": {
             "pattern": "competitor-signals",
+        },
+    },
+    {
+        "id": "cp-search-support",
+        "description": "Search Support Tickets — Search customer support ticket subjects and summaries using natural language. Find specific complaints or issues.",
+        "type": "index_search",
+        "configuration": {
+            "pattern": "support-tickets",
         },
     },
 ]

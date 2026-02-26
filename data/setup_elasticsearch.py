@@ -40,6 +40,10 @@ INDICES = {
     "competitor-signals": ("competitor-signals.json",  "competitor-signals.ndjson"),
     "budget-ledger":      ("budget-ledger.json",      "budget-ledger.ndjson"),
     "action-log":         ("action-log.json",         "action-log.ndjson"),
+    "creative-metrics":   ("creative-metrics.json",   "creative-metrics.ndjson"),
+    "website-events":     ("website-events.json",     "website-events.ndjson"),
+    "product-catalog":    ("product-catalog.json",    "product-catalog.ndjson"),
+    "support-tickets":    ("support-tickets.json",    "support-tickets.ndjson"),
 }
 
 
@@ -56,21 +60,28 @@ def get_es_client() -> Elasticsearch:
     return Elasticsearch(host, api_key=api_key)
 
 
+def _process_semantic_fields(properties: dict, inference_id: str | None, no_semantic: bool):
+    """Recursively process semantic_text fields in mapping properties."""
+    for field_name, field_def in list(properties.items()):
+        if field_def.get("type") == "semantic_text":
+            if no_semantic or not inference_id:
+                properties[field_name] = {"type": "text"}
+            else:
+                field_def["inference_id"] = inference_id
+        # Recurse into nested object properties
+        nested = field_def.get("properties")
+        if nested:
+            _process_semantic_fields(nested, inference_id, no_semantic)
+
+
 def load_mapping(mapping_file: str, inference_id: str | None, no_semantic: bool) -> dict:
-    """Load a mapping JSON file, handling semantic_text fields."""
+    """Load a mapping JSON file, handling semantic_text fields (including nested)."""
     path = os.path.join(MAPPINGS_DIR, mapping_file)
     with open(path) as f:
         mapping = json.load(f)
 
     properties = mapping.get("mappings", {}).get("properties", {})
-    for field_name, field_def in properties.items():
-        if field_def.get("type") == "semantic_text":
-            if no_semantic or not inference_id:
-                # Downgrade to text
-                properties[field_name] = {"type": "text"}
-            else:
-                # Replace placeholder with actual inference_id
-                field_def["inference_id"] = inference_id
+    _process_semantic_fields(properties, inference_id, no_semantic)
 
     return mapping
 

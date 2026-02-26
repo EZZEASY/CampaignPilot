@@ -8,8 +8,11 @@ import json
 from tools.campaign_tools import get_campaign, list_campaigns
 from tools.metrics_tools import get_metrics_summary, get_metrics_timeseries, detect_metric_anomalies
 from tools.budget_tools import get_portfolio_budget_summary, detect_budget_alerts
-from tools.creative_tools import detect_fatigued_creatives
+from tools.creative_tools import detect_fatigued_creatives, drill_down_ad_group
 from tools.audience_tools import detect_churn_risk
+from tools.website_tools import check_website_health
+from tools.product_tools import check_product_changes
+from tools.support_tools import analyze_support_sentiment
 from tools.competitor_tools import detect_competitor_threats, get_competitor_summary
 from tools.action_tools import get_actions, log_action
 from workflows.anomaly_scan import run_anomaly_scan
@@ -161,6 +164,63 @@ TOOL_DEFINITIONS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "check_website_health",
+            "description": "Check website landing page health — load times, bounce rates, CDN status, timeouts. Returns CRITICAL/SLOW/HEALTHY status per page.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "hours": {"type": "integer", "description": "Lookback window in hours (default 24)"},
+                },
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "check_product_changes",
+            "description": "Find recent product catalog events — price changes, out-of-stock events.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "days": {"type": "integer", "description": "Lookback window in days (default 7)"},
+                },
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "analyze_support_sentiment",
+            "description": "Aggregate customer support ticket volume and sentiment by category. Detects complaint surges.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "days": {"type": "integer", "description": "Lookback window in days (default 7)"},
+                },
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "drill_down_ad_group",
+            "description": "Drill down into ad group performance for a campaign — CTR, CPA, fatigue, spend by ad group.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "campaign_id": {"type": "string", "description": "Campaign ID"},
+                    "days": {"type": "integer", "description": "Lookback window in days (default 7)"},
+                },
+                "required": ["campaign_id"],
+            },
+        },
+    },
 ]
 
 
@@ -205,6 +265,17 @@ def dispatch_tool(name: str, arguments: dict) -> str:
             result = get_actions(
                 campaign_id=arguments.get("campaign_id"),
                 limit=arguments.get("limit", 20),
+            )
+        elif name == "check_website_health":
+            result = check_website_health(arguments.get("hours", 24))
+        elif name == "check_product_changes":
+            result = check_product_changes(arguments.get("days", 7))
+        elif name == "analyze_support_sentiment":
+            result = analyze_support_sentiment(arguments.get("days", 7))
+        elif name == "drill_down_ad_group":
+            result = drill_down_ad_group(
+                campaign_id=arguments["campaign_id"],
+                days=arguments.get("days", 7),
             )
         else:
             result = {"error": f"Unknown tool: {name}"}

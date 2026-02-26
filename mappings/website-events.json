@@ -1,0 +1,19 @@
+{
+  "mappings": {
+    "properties": {
+      "@timestamp":       { "type": "date" },
+      "date":             { "type": "date", "format": "yyyy-MM-dd||strict_date_optional_time||epoch_millis" },
+      "page_url":         { "type": "keyword" },
+      "campaign_id":      { "type": "keyword" },
+      "channel":          { "type": "keyword" },
+      "session_id":       { "type": "keyword" },
+      "load_time_ms":     { "type": "integer" },
+      "bounce":           { "type": "boolean" },
+      "converted":        { "type": "boolean" },
+      "timeout":          { "type": "boolean" },
+      "cdn_status":       { "type": "keyword" },
+      "device":           { "type": "keyword" },
+      "country":          { "type": "keyword" }
+    }
+  }
+}

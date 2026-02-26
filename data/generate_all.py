@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Synthetic data generator for CampaignPilot.
-Outputs 7 NDJSON files to data_output/.
+Synthetic data generator for CampaignPilot v2.1.
+Outputs 11 NDJSON files to data_output/.
 
 Usage:
     python data/generate_all.py
@@ -20,6 +20,11 @@ from config import (
     RANDOM_SEED, DATE_START, DATE_END, CHANNELS, CHANNEL_DEFAULTS,
     CAMPAIGN_THEMES, BUDGET_TIERS, AUDIENCE_SEGMENTS, CREATIVE_FORMATS,
     COMPETITORS, ANOMALY_SCENARIOS, ACTION_TYPES, ACTION_STATUSES,
+    AD_GROUPS_BY_OBJECTIVE, CREATIVES_PER_AD_GROUP, HEADLINES, CTAS,
+    LANDING_PAGES, PRODUCTS, SUPPORT_CATEGORIES, SUPPORT_SUBCATEGORIES,
+    PRICE_COMPLAINT_SUBJECTS, PRICE_COMPLAINT_SUMMARIES, NORMAL_TICKET_SUBJECTS,
+    CROSS_SYSTEM_SCENARIOS, CREATIVE_FATIGUE_SCENARIO,
+    _OBJECTIVE_KEY_MAP,
     build_campaign_list,
 )
 
@@ -105,67 +110,206 @@ def generate_campaigns(campaign_list: list[dict]) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
-# 2. Creative Assets
+# 2. Creative Assets — Campaign → Ad Group → Creative hierarchy (v2.1)
 # ---------------------------------------------------------------------------
 
-def generate_creative_assets(campaign_list: list[dict]) -> list[dict]:
-    """Generate creative assets for each campaign (3-8 per campaign)."""
+def generate_creative_assets(campaign_list: list[dict]) -> tuple[list[dict], dict]:
+    """
+    Generate creative assets with Campaign → Ad Group → Creative hierarchy.
+    Returns (asset_docs, ad_groups_map).
+
+    ad_groups_map structure:
+        {campaign_id: {"channel": ..., "ad_groups": [{"ad_group_id": ..., "ad_group_name": ...,
+         "audience_id": ..., "creatives": [{"creative_id": ..., "launch_date": ...}]}]}}
+    """
     from faker import Faker
     fake = Faker()
     Faker.seed(RANDOM_SEED + 100)
 
-    meta_fatigue = get_anomaly("meta_creative_fatigue")
     docs = []
-    asset_idx = 1
+    ad_groups_map = {}
+    creative_idx = 1
+    ag_idx = 1
 
     for c in campaign_list:
         channel = c["channel"]
         formats = CREATIVE_FORMATS.get(channel, ["image"])
-        n_assets = random.randint(3, min(8, len(formats) * 3))
+        objective = c["objective"]
+        obj_key = _OBJECTIVE_KEY_MAP.get(objective, "conversions")
+        ag_templates = AD_GROUPS_BY_OBJECTIVE.get(obj_key, AD_GROUPS_BY_OBJECTIVE["conversions"])
 
-        for i in range(n_assets):
-            asset_type = random.choice(formats)
-            created = DATE_START + timedelta(days=random.randint(0, 5))
-            base_ctr = CHANNEL_DEFAULTS[channel]["base_ctr"]
+        campaign_ad_groups = []
 
-            # Days since creation for fatigue baseline
-            days_live = (DATE_END - created).days
-            base_fatigue = min(0.2 + 0.03 * days_live, 0.5)  # slow baseline fatigue
+        for ag_template in ag_templates:
+            ad_group_id = f"AG-{ag_idx:04d}"
+            ag_idx += 1
 
-            fatigue_score = round(jitter(base_fatigue, 0.15), 3)
-            ctr = round(jitter(base_ctr, 0.15), 5)
-            impressions = int(jitter(CHANNEL_DEFAULTS[channel]["base_impressions"] / n_assets * days_live, 0.2))
+            n_creatives = random.randint(*CREATIVES_PER_AD_GROUP)
+            creatives_in_ag = []
 
-            # Anomaly: meta_creative_fatigue
-            if (meta_fatigue and c["campaign_id"] == meta_fatigue["campaign_id"]
-                    and channel == "meta_ads" and asset_type == "carousel"):
-                fatigue_score = round(min(fatigue_score + 0.4, 0.95), 3)
-                ctr = round(ctr * 0.45, 5)
+            for ci in range(n_creatives):
+                creative_id = f"CRE-{creative_idx:04d}"
+                creative_idx += 1
 
-            doc = {
-                "asset_id": f"ASSET-{asset_idx:04d}",
-                "campaign_id": c["campaign_id"],
-                "channel": channel,
-                "asset_type": asset_type,
-                "headline": fake.catch_phrase(),
-                "description": (
-                    f"{asset_type.replace('_', ' ').title()} creative for "
-                    f"{c['campaign_name']}. {fake.sentence()}"
-                ),
-                "status": "active",
-                "created_date": str(created),
-                "fatigue_score": fatigue_score,
-                "ctr": ctr,
-                "impressions": max(impressions, 100),
-            }
-            docs.append(doc)
-            asset_idx += 1
+                creative_type = random.choice(formats)
+                launch_date = DATE_START + timedelta(days=random.randint(0, 5))
+                theme = c["campaign_name"].split(" — ")[0]
+                vertical = c["vertical"]
+
+                headline_tpl = random.choice(HEADLINES)
+                headline = headline_tpl.format(
+                    pct=random.randint(10, 50),
+                    vertical=vertical.title(),
+                    theme=theme,
+                )
+                cta = random.choice(CTAS)
+                ab_group = "A" if ci % 2 == 0 else "B"
+
+                doc = {
+                    "creative_id": creative_id,
+                    "campaign_id": c["campaign_id"],
+                    "ad_group_id": ad_group_id,
+                    "ad_group_name": ag_template["name"],
+                    "channel": channel,
+                    "audience_id": ag_template["audience_id"],
+                    "type": creative_type,
+                    "headline": headline,
+                    "description": (
+                        f"{creative_type.replace('_', ' ').title()} creative for "
+                        f"{c['campaign_name']}. {fake.sentence()}"
+                    ),
+                    "cta": cta,
+                    "visual_description": fake.sentence(),
+                    "ab_group": ab_group,
+                    "launch_date": str(launch_date),
+                    "status": "active",
+                }
+                docs.append(doc)
+                creatives_in_ag.append({
+                    "creative_id": creative_id,
+                    "launch_date": str(launch_date),
+                })
+
+            campaign_ad_groups.append({
+                "ad_group_id": ad_group_id,
+                "ad_group_name": ag_template["name"],
+                "audience_id": ag_template["audience_id"],
+                "creatives": creatives_in_ag,
+            })
+
+        ad_groups_map[c["campaign_id"]] = {
+            "channel": channel,
+            "ad_groups": campaign_ad_groups,
+        }
+
+    return docs, ad_groups_map
+
+
+# ---------------------------------------------------------------------------
+# 3. Creative Metrics — daily timeseries per creative (v2.1)
+# ---------------------------------------------------------------------------
+
+def generate_creative_metrics(ad_groups_map: dict) -> list[dict]:
+    """Generate daily creative-level metrics with fatigue curves and anomaly injections."""
+    cdn_scenario = CROSS_SYSTEM_SCENARIOS["cdn_crash_cascade"]
+    price_scenario = CROSS_SYSTEM_SCENARIOS["price_increase_cascade"]
+    fatigue_scenario = CREATIVE_FATIGUE_SCENARIO
+
+    docs = []
+
+    for campaign_id, camp_info in ad_groups_map.items():
+        channel = camp_info["channel"]
+        defaults = CHANNEL_DEFAULTS[channel]
+
+        for ag in camp_info["ad_groups"]:
+            ad_group_id = ag["ad_group_id"]
+            n_creatives = len(ag["creatives"])
+
+            for cre in ag["creatives"]:
+                creative_id = cre["creative_id"]
+                launch = date.fromisoformat(cre["launch_date"])
+
+                for d in date_range(DATE_START, DATE_END):
+                    if d < launch:
+                        continue
+
+                    days_since_launch = (d - launch).days
+                    dow_factor = 0.85 if d.weekday() >= 5 else 1.0
+
+                    # Natural fatigue curve
+                    fatigue = min(0.95, 0.05 + (days_since_launch / 55) ** 1.5)
+
+                    # Creative fatigue scenario — accelerated fatigue for specific campaign
+                    if (campaign_id == fatigue_scenario["campaign_id"]
+                            and channel == fatigue_scenario["channel"]
+                            and days_since_launch >= fatigue_scenario["fatigue_start_day"]):
+                        accel_days = days_since_launch - fatigue_scenario["fatigue_start_day"]
+                        fatigue = min(0.95, fatigue + accel_days * 0.04 * fatigue_scenario["fatigue_acceleration"])
+
+                    performance_factor = 1.0 - fatigue * 0.6
+
+                    # Per-creative share of campaign totals
+                    share = 1.0 / max(n_creatives * len(ad_groups_map.get(campaign_id, {}).get("ad_groups", [None])), 1)
+
+                    impressions = int(jitter(defaults["base_impressions"] * share * dow_factor, 0.15))
+                    clicks = int(jitter(defaults["base_clicks"] * share * dow_factor * performance_factor, 0.18))
+                    conversions = max(int(jitter(defaults["base_conversions"] * share * dow_factor * performance_factor, 0.20)), 0)
+                    spend = round(jitter(defaults["base_spend"] * share * dow_factor, 0.12), 2)
+                    revenue = round(spend * defaults["base_roas"] * performance_factor * random.uniform(0.9, 1.1), 2)
+
+                    ctr = round(clicks / max(impressions, 1), 5)
+                    cpa = round(spend / max(conversions, 1), 2)
+                    roas = round(revenue / max(spend, 0.01), 2)
+                    conversion_rate = round(conversions / max(clicks, 1), 4)
+                    frequency = round(1.0 + days_since_launch * 0.15 * random.uniform(0.8, 1.2), 2)
+
+                    # CDN crash cascade — spike CPA on trigger date
+                    if campaign_id in cdn_scenario["affected_campaigns"]:
+                        offset = anomaly_day_offset(cdn_scenario["trigger_date"], d)
+                        if 0 <= offset <= 2:
+                            ramp = sigmoid_ramp(offset, steepness=3.0, midpoint=0.5)
+                            conversions = max(int(conversions * (1 - 0.7 * ramp)), 0)
+                            cpa = round(spend / max(conversions, 1), 2)
+                            roas = round(revenue / max(spend, 0.01) * (1 - 0.6 * ramp), 2)
+
+                    # Price increase cascade — conversion rate drops
+                    if campaign_id in price_scenario["affected_campaigns"]:
+                        offset = anomaly_day_offset(price_scenario["trigger_date"], d)
+                        if offset >= 0:
+                            drop = price_scenario["conversion_drop_pct"] / 100
+                            ramp = sigmoid_ramp(offset, steepness=0.8, midpoint=3.0)
+                            conversions = max(int(conversions * (1 - drop * ramp)), 0)
+                            conversion_rate = round(conversions / max(clicks, 1), 4)
+                            cpa = round(spend / max(conversions, 1), 2)
+
+                    ts = datetime(d.year, d.month, d.day, 23, 59, 0)
+
+                    doc = {
+                        "@timestamp": ts.isoformat(),
+                        "date": str(d),
+                        "creative_id": creative_id,
+                        "campaign_id": campaign_id,
+                        "ad_group_id": ad_group_id,
+                        "channel": channel,
+                        "impressions": max(impressions, 10),
+                        "clicks": max(clicks, 0),
+                        "conversions": conversions,
+                        "spend": spend,
+                        "revenue": revenue,
+                        "ctr": max(ctr, 0.0),
+                        "cpa": cpa,
+                        "roas": max(roas, 0.0),
+                        "conversion_rate": max(conversion_rate, 0.0),
+                        "frequency": frequency,
+                        "fatigue_score": round(fatigue, 3),
+                    }
+                    docs.append(doc)
 
     return docs
 
 
 # ---------------------------------------------------------------------------
-# 3. Channel Metrics — returns (docs, spend_map) for cross-index consistency
+# 4. Channel Metrics — returns (docs, spend_map) for cross-index consistency
 # ---------------------------------------------------------------------------
 
 def generate_channel_metrics(campaign_list: list[dict]) -> tuple[list[dict], dict]:
@@ -259,7 +403,7 @@ def generate_channel_metrics(campaign_list: list[dict]) -> tuple[list[dict], dic
 
 
 # ---------------------------------------------------------------------------
-# 4. Budget Ledger — uses spend_map for cross-index consistency
+# 5. Budget Ledger — uses spend_map for cross-index consistency
 # ---------------------------------------------------------------------------
 
 def generate_budget_ledger(campaign_list: list[dict], spend_map: dict) -> list[dict]:
@@ -300,7 +444,7 @@ def generate_budget_ledger(campaign_list: list[dict], spend_map: dict) -> list[d
 
 
 # ---------------------------------------------------------------------------
-# 5. Audience Segments
+# 6. Audience Segments
 # ---------------------------------------------------------------------------
 
 def generate_audience_segments(campaign_list: list[dict]) -> list[dict]:
@@ -360,7 +504,7 @@ def generate_audience_segments(campaign_list: list[dict]) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
-# 6. Competitor Signals
+# 7. Competitor Signals
 # ---------------------------------------------------------------------------
 
 def generate_competitor_signals() -> list[dict]:
@@ -422,7 +566,7 @@ def generate_competitor_signals() -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
-# 7. Action Log (seed data)
+# 8. Action Log (seed data)
 # ---------------------------------------------------------------------------
 
 def generate_action_log(campaign_list: list[dict]) -> list[dict]:
@@ -450,8 +594,8 @@ def generate_action_log(campaign_list: list[dict]) -> list[dict]:
         elif action_type == "bid_adjustment":
             params = {"adjustment_pct": round(random.uniform(-20, 30), 1)}
         elif action_type == "creative_swap":
-            params = {"old_asset": f"ASSET-{random.randint(1, 200):04d}",
-                      "new_asset": f"ASSET-{random.randint(1, 200):04d}"}
+            params = {"old_asset": f"CRE-{random.randint(1, 200):04d}",
+                      "new_asset": f"CRE-{random.randint(1, 200):04d}"}
 
         doc = {
             "action_id": f"ACT-{action_idx:04d}",
@@ -474,11 +618,215 @@ def generate_action_log(campaign_list: list[dict]) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
+# 9. Website Events (v2.1)
+# ---------------------------------------------------------------------------
+
+def generate_website_events(campaign_list: list[dict]) -> list[dict]:
+    """Generate website landing page events with CDN crash scenario."""
+    from faker import Faker
+    fake = Faker()
+    Faker.seed(RANDOM_SEED + 400)
+
+    cdn_scenario = CROSS_SYSTEM_SCENARIOS["cdn_crash_cascade"]
+    devices = ["desktop", "mobile", "tablet"]
+    countries = ["US", "UK", "CA", "DE", "FR", "AU"]
+    docs = []
+    session_idx = 1
+
+    for d in date_range(DATE_START, DATE_END):
+        # ~80-120 sessions per day across landing pages
+        n_sessions = random.randint(80, 120)
+        for _ in range(n_sessions):
+            page_url = random.choice(LANDING_PAGES)
+            # Assign to a random campaign that matches the page theme
+            c = random.choice(campaign_list)
+            device = random.choice(devices)
+            country = random.choice(countries)
+
+            # Base metrics
+            load_time = int(jitter(1200, 0.3))  # ~1200ms baseline
+            bounce = random.random() < 0.35
+            converted = (not bounce) and (random.random() < 0.12)
+            timeout = False
+            cdn_status = "healthy"
+
+            # CDN crash cascade injection
+            if page_url in cdn_scenario["affected_pages"]:
+                offset = anomaly_day_offset(cdn_scenario["trigger_date"], d)
+                if 0 <= offset <= 2:
+                    ramp = sigmoid_ramp(offset, steepness=3.0, midpoint=0.5)
+                    load_time = int(load_time + cdn_scenario["load_time_spike_ms"] * ramp)
+                    cdn_status = cdn_scenario["cdn_status"]
+                    bounce = random.random() < (0.35 + 0.45 * ramp)
+                    converted = (not bounce) and (random.random() < 0.03)
+                    timeout = random.random() < 0.3 * ramp
+
+            hour = random.randint(6, 23)
+            ts = datetime(d.year, d.month, d.day, hour, random.randint(0, 59), random.randint(0, 59))
+
+            doc = {
+                "@timestamp": ts.isoformat(),
+                "date": str(d),
+                "page_url": page_url,
+                "campaign_id": c["campaign_id"],
+                "channel": c["channel"],
+                "session_id": f"SESS-{session_idx:06d}",
+                "load_time_ms": load_time,
+                "bounce": bounce,
+                "converted": converted,
+                "timeout": timeout,
+                "cdn_status": cdn_status,
+                "device": device,
+                "country": country,
+            }
+            docs.append(doc)
+            session_idx += 1
+
+    return docs
+
+
+# ---------------------------------------------------------------------------
+# 10. Product Catalog (v2.1)
+# ---------------------------------------------------------------------------
+
+def generate_product_catalog() -> list[dict]:
+    """Generate product catalog events (price changes, stock updates)."""
+    price_scenario = CROSS_SYSTEM_SCENARIOS["price_increase_cascade"]
+    docs = []
+
+    event_types = ["price_check", "stock_update", "price_change"]
+
+    for d in date_range(DATE_START, DATE_END):
+        for prod in PRODUCTS:
+            event_type = "price_check"
+            old_price = prod["base_price"]
+            new_price = prod["base_price"]
+            change_pct = 0.0
+            stock_status = "in_stock"
+
+            # Price increase cascade
+            if prod["product_id"] == price_scenario["product_id"]:
+                offset = anomaly_day_offset(price_scenario["trigger_date"], d)
+                if offset == 0:
+                    event_type = "price_change"
+                    new_price = round(old_price * (1 + price_scenario["price_change_pct"] / 100), 2)
+                    change_pct = price_scenario["price_change_pct"]
+                elif offset > 0:
+                    # Price remains elevated
+                    event_type = "price_check"
+                    old_price = round(prod["base_price"] * (1 + price_scenario["price_change_pct"] / 100), 2)
+                    new_price = old_price
+                    change_pct = 0.0
+
+            # Random stock fluctuations for variety
+            if random.random() < 0.05:
+                stock_status = random.choice(["low_stock", "out_of_stock"])
+                if stock_status == "out_of_stock":
+                    event_type = "out_of_stock"
+
+            ts = datetime(d.year, d.month, d.day, 8, 0, 0)
+
+            doc = {
+                "@timestamp": ts.isoformat(),
+                "date": str(d),
+                "product_id": prod["product_id"],
+                "product_name": prod["name"],
+                "event_type": event_type,
+                "old_price": old_price,
+                "new_price": new_price,
+                "change_pct": change_pct,
+                "stock_status": stock_status,
+                "category": "consumer_goods",
+            }
+            docs.append(doc)
+
+    return docs
+
+
+# ---------------------------------------------------------------------------
+# 11. Support Tickets (v2.1)
+# ---------------------------------------------------------------------------
+
+def generate_support_tickets() -> list[dict]:
+    """Generate customer support tickets with price complaint surge."""
+    from faker import Faker
+    fake = Faker()
+    Faker.seed(RANDOM_SEED + 500)
+
+    price_scenario = CROSS_SYSTEM_SCENARIOS["price_increase_cascade"]
+    docs = []
+    ticket_idx = 1
+
+    for d in date_range(DATE_START, DATE_END):
+        # Base: 10-20 tickets per day
+        n_tickets = random.randint(10, 20)
+
+        # Price increase cascade: surge of complaint tickets
+        price_offset = anomaly_day_offset(price_scenario["trigger_date"], d)
+        extra_complaints = 0
+        if price_offset >= 0:
+            ramp = sigmoid_ramp(price_offset, steepness=1.0, midpoint=2.0)
+            extra_complaints = int(15 * ramp)
+
+        for i in range(n_tickets + extra_complaints):
+            is_price_complaint = i >= n_tickets  # extra tickets are price complaints
+
+            if is_price_complaint:
+                category = "billing"
+                subcategory = "charge_dispute"
+                product = random.choice(PRODUCTS)
+                subject_tpl = random.choice(PRICE_COMPLAINT_SUBJECTS)
+                subject = subject_tpl.format(product=product["name"])
+                summary_tpl = random.choice(PRICE_COMPLAINT_SUMMARIES)
+                summary = summary_tpl.format(
+                    pct=price_scenario["price_change_pct"],
+                    product=product["name"],
+                )
+                sentiment = round(random.uniform(-0.9, -0.5), 2)
+                priority = "high"
+            else:
+                category = random.choice(SUPPORT_CATEGORIES)
+                subcategory = random.choice(SUPPORT_SUBCATEGORIES[category])
+                subject = random.choice(NORMAL_TICKET_SUBJECTS)
+                summary = fake.sentence(nb_words=12)
+                sentiment = round(random.uniform(-0.3, 0.5), 2)
+                priority = random.choice(["low", "medium", "high"])
+
+            channel = random.choice(CHANNELS)
+            segment = random.choice(AUDIENCE_SEGMENTS)
+
+            hour = random.randint(7, 22)
+            ts = datetime(d.year, d.month, d.day, hour, random.randint(0, 59), random.randint(0, 59))
+
+            doc = {
+                "@timestamp": ts.isoformat(),
+                "date": str(d),
+                "ticket_id": f"TKT-{ticket_idx:05d}",
+                "category": category,
+                "subcategory": subcategory,
+                "channel": channel,
+                "segment": segment,
+                "campaign_id": random.choice([""] + [f"CAMP-2026-{i:03d}" for i in range(1, 51)]),
+                "sentiment": sentiment,
+                "priority": priority,
+                "status": random.choice(["open", "in_progress", "resolved", "closed"]),
+                "content": {
+                    "subject": subject,
+                    "summary": summary,
+                },
+            }
+            docs.append(doc)
+            ticket_idx += 1
+
+    return docs
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
 def main():
-    print("CampaignPilot — Generating synthetic data...")
+    print("CampaignPilot v2.1 — Generating synthetic data...")
     print(f"  Random seed: {RANDOM_SEED}")
     print(f"  Date range: {DATE_START} to {DATE_END}")
     print()
@@ -488,17 +836,17 @@ def main():
     campaigns = generate_campaigns(campaign_list)
     write_ndjson("campaigns.ndjson", campaigns)
 
-    # 2. Creative Assets
-    creatives = generate_creative_assets(campaign_list)
-    write_ndjson("creative-assets.ndjson", creatives)
-
-    # 3. Channel Metrics (also produces spend_map)
+    # 2. Channel Metrics (also produces spend_map)
     metrics, spend_map = generate_channel_metrics(campaign_list)
     write_ndjson("channel-metrics.ndjson", metrics)
 
-    # 4. Budget Ledger (uses spend_map for consistency)
-    ledger = generate_budget_ledger(campaign_list, spend_map)
-    write_ndjson("budget-ledger.ndjson", ledger)
+    # 3. Creative Assets (returns tuple: docs + ad_groups_map)
+    creatives, ad_groups_map = generate_creative_assets(campaign_list)
+    write_ndjson("creative-assets.ndjson", creatives)
+
+    # 4. Creative Metrics (uses ad_groups_map)
+    creative_metrics = generate_creative_metrics(ad_groups_map)
+    write_ndjson("creative-metrics.ndjson", creative_metrics)
 
     # 5. Audience Segments
     segments = generate_audience_segments(campaign_list)
@@ -508,12 +856,28 @@ def main():
     signals = generate_competitor_signals()
     write_ndjson("competitor-signals.ndjson", signals)
 
-    # 7. Action Log
+    # 7. Budget Ledger (uses spend_map for consistency)
+    ledger = generate_budget_ledger(campaign_list, spend_map)
+    write_ndjson("budget-ledger.ndjson", ledger)
+
+    # 8. Action Log
     actions = generate_action_log(campaign_list)
     write_ndjson("action-log.ndjson", actions)
 
+    # 9. Website Events
+    website_events = generate_website_events(campaign_list)
+    write_ndjson("website-events.ndjson", website_events)
+
+    # 10. Product Catalog
+    product_catalog = generate_product_catalog()
+    write_ndjson("product-catalog.ndjson", product_catalog)
+
+    # 11. Support Tickets
+    support_tickets = generate_support_tickets()
+    write_ndjson("support-tickets.ndjson", support_tickets)
+
     print()
-    print("Done! Files written to data_output/")
+    print("Done! 11 files written to data_output/")
 
 
 if __name__ == "__main__":

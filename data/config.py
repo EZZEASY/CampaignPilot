@@ -184,6 +184,138 @@ ACTION_TYPES = [
 
 ACTION_STATUSES = ["proposed", "approved", "executed", "rejected"]
 
+# ---------------------------------------------------------------------------
+# Ad Group templates by objective (v2.1 — Campaign → AdGroup → Creative)
+# ---------------------------------------------------------------------------
+
+# Mapping from existing objectives to ad-group template keys
+_OBJECTIVE_KEY_MAP = {
+    "conversions": "conversions",
+    "awareness": "brand_awareness",
+    "retargeting": "conversions",
+    "retention": "conversions",
+    "leads": "lead_gen",
+}
+
+AD_GROUPS_BY_OBJECTIVE = {
+    "conversions": [
+        {"name": "Broad Prospecting",  "audience_id": "broad_interest"},
+        {"name": "Lookalike 1%",       "audience_id": "lookalike_1pct"},
+        {"name": "High Intent",        "audience_id": "high_intent_kw"},
+    ],
+    "brand_awareness": [
+        {"name": "Top-of-Funnel Reach",   "audience_id": "demo_broad"},
+        {"name": "Video Viewers",          "audience_id": "video_viewers"},
+    ],
+    "lead_gen": [
+        {"name": "Webinar Signups",    "audience_id": "content_engaged"},
+        {"name": "Whitepaper Leads",   "audience_id": "whitepaper_dl"},
+        {"name": "Demo Requests",      "audience_id": "demo_requests"},
+    ],
+}
+
+CREATIVES_PER_AD_GROUP = (2, 4)
+
+# ---------------------------------------------------------------------------
+# Creative content templates (v2.1)
+# ---------------------------------------------------------------------------
+
+HEADLINES = [
+    "Unlock {pct}% Savings Today",
+    "Your {vertical} Solution Awaits",
+    "Limited-Time {theme} Offer",
+    "Transform Your {vertical} Strategy",
+    "Don't Miss Out — {theme}",
+    "Boost Performance with {theme}",
+    "{theme}: Results You Can Measure",
+    "Smart {vertical} Starts Here",
+]
+
+CTAS = ["Shop Now", "Learn More", "Sign Up", "Get Started", "Request Demo", "Download Free"]
+
+# ---------------------------------------------------------------------------
+# Landing pages & products (v2.1)
+# ---------------------------------------------------------------------------
+
+LANDING_PAGES = [
+    "/lp/spring-sale",
+    "/lp/product-launch",
+    "/lp/webinar-signup",
+    "/lp/loyalty-rewards",
+    "/lp/enterprise-demo",
+    "/lp/flash-deals",
+]
+
+PRODUCTS = [
+    {"product_id": "PROD-001", "name": "Widget Pro",     "base_price": 49.99},
+    {"product_id": "PROD-002", "name": "Gadget Elite",   "base_price": 129.99},
+    {"product_id": "PROD-003", "name": "Service Plus",   "base_price": 29.99},
+]
+
+# ---------------------------------------------------------------------------
+# Support ticket templates (v2.1)
+# ---------------------------------------------------------------------------
+
+SUPPORT_CATEGORIES = ["billing", "product", "shipping", "account", "other"]
+
+SUPPORT_SUBCATEGORIES = {
+    "billing":  ["charge_dispute", "refund_request", "invoice_question"],
+    "product":  ["defective_item", "wrong_item", "missing_parts"],
+    "shipping": ["delayed", "lost_package", "wrong_address"],
+    "account":  ["login_issue", "password_reset", "profile_update"],
+    "other":    ["general_inquiry", "feedback", "complaint"],
+}
+
+PRICE_COMPLAINT_SUBJECTS = [
+    "Price increased without notice",
+    "Why did the price go up?",
+    "Unhappy with recent price change",
+    "Price hike on {product}",
+]
+
+PRICE_COMPLAINT_SUMMARIES = [
+    "Customer upset about {pct}% price increase on {product}. Requesting refund or price match.",
+    "Loyal customer threatening to leave due to unexpected price change on {product}.",
+    "Complaint about {product} price jump. Customer comparing with competitor prices.",
+]
+
+NORMAL_TICKET_SUBJECTS = [
+    "Order status inquiry",
+    "Need help with my account",
+    "Product question",
+    "Shipping delay concern",
+    "Return request",
+    "General feedback",
+]
+
+# ---------------------------------------------------------------------------
+# Cross-system anomaly scenarios (v2.1)
+# ---------------------------------------------------------------------------
+
+CROSS_SYSTEM_SCENARIOS = {
+    "cdn_crash_cascade": {
+        "trigger_date": "2026-02-19",
+        "affected_pages": ["/lp/spring-sale", "/lp/flash-deals"],
+        "affected_campaigns": ["CAMP-2026-001", "CAMP-2026-041"],
+        "load_time_spike_ms": 12000,
+        "cdn_status": "degraded",
+    },
+    "price_increase_cascade": {
+        "trigger_date": "2026-02-16",
+        "product_id": "PROD-001",
+        "price_change_pct": 25,
+        "affected_campaigns": ["CAMP-2026-001", "CAMP-2026-003", "CAMP-2026-041"],
+        "conversion_drop_pct": 35,
+    },
+}
+
+CREATIVE_FATIGUE_SCENARIO = {
+    "campaign_id": "CAMP-2026-017",
+    "channel": "meta_ads",
+    "fatigue_start_day": 8,
+    "fatigue_acceleration": 2.5,
+}
+
 
 def build_campaign_list():
     """

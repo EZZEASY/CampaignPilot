@@ -348,6 +348,106 @@ with tab_dashboard:
     except Exception as exc:
         st.error(f"Failed to load channel data: {exc}")
 
+    # Website Health panel (v2.1)
+    st.divider()
+    st.subheader("Website Health")
+    try:
+        website_data = run_esql(
+            'FROM website-events'
+            ' | WHERE @timestamp >= NOW() - 24 hours'
+            ' | STATS avg_load = AVG(load_time_ms),'
+            ' bounce_rate = AVG(CASE(bounce == true, 1, 0)),'
+            ' conv_rate = AVG(CASE(converted == true, 1, 0)),'
+            ' timeout_rate = AVG(CASE(timeout == true, 1, 0)),'
+            ' total_sessions = COUNT(*)'
+            ' BY page_url, cdn_status'
+            ' | SORT avg_load DESC | LIMIT 20'
+        )
+        if website_data:
+            for row in website_data:
+                avg_load = row.get("avg_load", 0)
+                timeout_rate = row.get("timeout_rate", 0)
+                if avg_load > 5000 or timeout_rate > 0.10:
+                    row["health"] = "CRITICAL"
+                elif avg_load > 3000:
+                    row["health"] = "SLOW"
+                else:
+                    row["health"] = "HEALTHY"
+
+            # Status cards
+            health_counts = {"CRITICAL": 0, "SLOW": 0, "HEALTHY": 0}
+            for row in website_data:
+                health_counts[row["health"]] = health_counts.get(row["health"], 0) + 1
+
+            wc1, wc2, wc3 = st.columns(3)
+            wc1.metric("Critical Pages", health_counts.get("CRITICAL", 0))
+            wc2.metric("Slow Pages", health_counts.get("SLOW", 0))
+            wc3.metric("Healthy Pages", health_counts.get("HEALTHY", 0))
+
+            # Data table
+            df_web = pd.DataFrame(website_data)
+            display_cols = [c for c in ["page_url", "health", "avg_load", "bounce_rate", "conv_rate", "cdn_status", "total_sessions"] if c in df_web.columns]
+            if "avg_load" in df_web.columns:
+                df_web["avg_load"] = df_web["avg_load"].apply(lambda v: f"{v:,.0f} ms")
+            if "bounce_rate" in df_web.columns:
+                df_web["bounce_rate"] = df_web["bounce_rate"].apply(lambda v: f"{v:.1%}")
+            if "conv_rate" in df_web.columns:
+                df_web["conv_rate"] = df_web["conv_rate"].apply(lambda v: f"{v:.1%}")
+            st.dataframe(df_web[display_cols], use_container_width=True, hide_index=True)
+        else:
+            st.info("No website event data available.")
+    except Exception as exc:
+        st.warning(f"Website health data not available: {exc}")
+
+    # Support Pulse panel (v2.1)
+    st.divider()
+    st.subheader("Support Pulse")
+    try:
+        support_daily = run_esql(
+            'FROM support-tickets'
+            ' | STATS daily_tickets = COUNT(*), avg_sentiment = AVG(sentiment)'
+            ' BY date'
+            ' | SORT date ASC | LIMIT 30'
+        )
+        if support_daily:
+            df_support = pd.DataFrame(support_daily)
+            df_support["date"] = pd.to_datetime(df_support["date"])
+            df_support = df_support.sort_values("date")
+
+            from plotly.subplots import make_subplots
+
+            fig_support = make_subplots(specs=[[{"secondary_y": True}]])
+            fig_support.add_trace(
+                go.Bar(
+                    x=df_support["date"], y=df_support["daily_tickets"],
+                    name="Daily Tickets",
+                    marker_color="#E53E3E",
+                    opacity=0.7,
+                ),
+                secondary_y=False,
+            )
+            fig_support.add_trace(
+                go.Scatter(
+                    x=df_support["date"], y=df_support["avg_sentiment"],
+                    name="Avg Sentiment",
+                    line=dict(color="#4285F4", width=2),
+                    mode="lines+markers",
+                    marker=dict(size=4),
+                ),
+                secondary_y=True,
+            )
+            fig_support.update_layout(
+                title="Daily Support Tickets & Sentiment",
+                **PLOTLY_LAYOUT,
+            )
+            fig_support.update_yaxes(title_text="Ticket Count", secondary_y=False)
+            fig_support.update_yaxes(title_text="Avg Sentiment", secondary_y=True)
+            st.plotly_chart(fig_support, use_container_width=True)
+        else:
+            st.info("No support ticket data available.")
+    except Exception as exc:
+        st.warning(f"Support pulse data not available: {exc}")
+
 
 # ===== TAB 2: Anomaly Alerts =====
 with tab_alerts:

@@ -1,0 +1,23 @@
+{
+  "mappings": {
+    "properties": {
+      "@timestamp":      { "type": "date" },
+      "date":            { "type": "date", "format": "yyyy-MM-dd||strict_date_optional_time||epoch_millis" },
+      "creative_id":     { "type": "keyword" },
+      "campaign_id":     { "type": "keyword" },
+      "ad_group_id":     { "type": "keyword" },
+      "channel":         { "type": "keyword" },
+      "impressions":     { "type": "long" },
+      "clicks":          { "type": "long" },
+      "conversions":     { "type": "integer" },
+      "spend":           { "type": "float" },
+      "revenue":         { "type": "float" },
+      "ctr":             { "type": "float" },
+      "cpa":             { "type": "float" },
+      "roas":            { "type": "float" },
+      "conversion_rate": { "type": "float" },
+      "frequency":       { "type": "float" },
+      "fatigue_score":   { "type": "float" }
+    }
+  }
+}

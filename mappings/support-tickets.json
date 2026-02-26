@@ -1,0 +1,24 @@
+{
+  "mappings": {
+    "properties": {
+      "@timestamp":  { "type": "date" },
+      "date":        { "type": "date", "format": "yyyy-MM-dd||strict_date_optional_time||epoch_millis" },
+      "ticket_id":   { "type": "keyword" },
+      "category":    { "type": "keyword" },
+      "subcategory": { "type": "keyword" },
+      "channel":     { "type": "keyword" },
+      "segment":     { "type": "keyword" },
+      "campaign_id": { "type": "keyword" },
+      "sentiment":   { "type": "float" },
+      "priority":    { "type": "keyword" },
+      "status":      { "type": "keyword" },
+      "content": {
+        "type": "object",
+        "properties": {
+          "subject": { "type": "semantic_text", "inference_id": "__INFERENCE_ID__" },
+          "summary": { "type": "semantic_text", "inference_id": "__INFERENCE_ID__" }
+        }
+      }
+    }
+  }
+}

@@ -11,6 +11,9 @@ from tools.creative_tools import detect_fatigued_creatives
 from tools.audience_tools import detect_churn_risk
 from tools.competitor_tools import detect_competitor_threats
 from tools.campaign_tools import get_campaigns_by_ids
+from tools.website_tools import check_website_health
+from tools.product_tools import check_product_changes
+from tools.support_tools import analyze_support_sentiment
 
 SEVERITY_ORDER = {"high": 0, "medium": 1, "low": 2}
 
@@ -85,6 +88,59 @@ def run_anomaly_scan() -> dict:
             "impression_share": round(row["impression_share"], 2),
             "estimated_spend": round(row.get("estimated_spend", 0), 2),
         })
+
+    # 7. Website degradation
+    try:
+        for row in check_website_health(24):
+            if row.get("health") in ("CRITICAL", "SLOW"):
+                alerts.append({
+                    "campaign_id": "",
+                    "channel": "",
+                    "alert_type": "website_degradation",
+                    "severity": "high" if row["health"] == "CRITICAL" else "medium",
+                    "page_url": row.get("page_url", ""),
+                    "avg_load_ms": round(row.get("avg_load", 0), 0),
+                    "bounce_rate": round(row.get("bounce_rate", 0), 2),
+                    "timeout_rate": round(row.get("timeout_rate", 0), 2),
+                })
+    except Exception:
+        pass  # website-events index may not exist yet
+
+    # 8. Product price changes
+    try:
+        for row in check_product_changes(7):
+            if row.get("event_type") == "price_change" and abs(row.get("change_pct", 0)) > 10:
+                alerts.append({
+                    "campaign_id": "",
+                    "channel": "",
+                    "alert_type": "product_price_change",
+                    "severity": "high" if abs(row.get("change_pct", 0)) > 20 else "medium",
+                    "product_id": row.get("product_id", ""),
+                    "product_name": row.get("product_name", ""),
+                    "change_pct": round(row.get("change_pct", 0), 1),
+                    "old_price": row.get("old_price"),
+                    "new_price": row.get("new_price"),
+                })
+    except Exception:
+        pass
+
+    # 9. Support ticket surge
+    try:
+        for row in analyze_support_sentiment(7):
+            total = row.get("total_tickets", 0)
+            sentiment = row.get("avg_sentiment", 0)
+            if total > 25 or sentiment < -0.6:
+                alerts.append({
+                    "campaign_id": "",
+                    "channel": "",
+                    "alert_type": "support_surge",
+                    "severity": "high" if sentiment < -0.6 else "medium",
+                    "category": row.get("category", ""),
+                    "total_tickets": total,
+                    "avg_sentiment": round(sentiment, 2),
+                })
+    except Exception:
+        pass
 
     # Enrich with campaign names
     campaign_ids = list({a["campaign_id"] for a in alerts if a.get("campaign_id")})

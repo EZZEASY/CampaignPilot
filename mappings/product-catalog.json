@@ -1,0 +1,16 @@
+{
+  "mappings": {
+    "properties": {
+      "@timestamp":    { "type": "date" },
+      "date":          { "type": "date", "format": "yyyy-MM-dd||strict_date_optional_time||epoch_millis" },
+      "product_id":    { "type": "keyword" },
+      "product_name":  { "type": "semantic_text", "inference_id": "__INFERENCE_ID__" },
+      "event_type":    { "type": "keyword" },
+      "old_price":     { "type": "float" },
+      "new_price":     { "type": "float" },
+      "change_pct":    { "type": "float" },
+      "stock_status":  { "type": "keyword" },
+      "category":      { "type": "keyword" }
+    }
+  }
+}
